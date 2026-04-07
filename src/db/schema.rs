@@ -3,8 +3,6 @@
 //! This module defines the database schema and entity structs for the
 //! Telegram Sticker Kang Bot.
 
-use sqlx::FromRow;
-
 // ============================================================================
 // Schema SQL Constants
 // ============================================================================
@@ -93,7 +91,7 @@ pub const SCHEMA_MIGRATIONS: &[&str] = &[
 // ============================================================================
 
 /// User entity
-#[derive(Debug, Clone, FromRow)]
+#[derive(Debug, Clone)]
 pub struct User {
     pub id: i64,
     pub telegram_id: i64,
@@ -104,7 +102,7 @@ pub struct User {
 }
 
 /// Sticker pack entity
-#[derive(Debug, Clone, FromRow)]
+#[derive(Debug, Clone)]
 pub struct StickerPack {
     pub id: i64,
     pub user_id: i64,

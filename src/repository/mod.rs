@@ -11,7 +11,7 @@ pub use user::{SqliteUserRepository, UserRepository};
 #[derive(Debug, Error)]
 pub enum RepositoryError {
     #[error("Database connection error: {0}")]
-    ConnectionError(#[from] sqlx::Error),
+    ConnectionError(#[from] libsql::Error),
 
     #[error("Entity not found")]
     NotFound,

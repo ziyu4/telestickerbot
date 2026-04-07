@@ -52,6 +52,8 @@ pub enum DatabaseConfig {
     Turso {
         /// Turso connection URL.
         url: String,
+        /// Turso authentication token (required for remote).
+        auth_token: String,
     },
     /// Local SQLite database configuration.
     Sqlite {
@@ -85,7 +87,9 @@ impl Config {
             .map_err(|_| ConfigError::MissingVar("TELEGRAM_BOT_TOKEN"))?;
 
         let database = if let Ok(url) = env::var("DATABASE_URL") {
-            DatabaseConfig::Turso { url }
+            let auth_token = env::var("TURSO_AUTH_TOKEN")
+                .map_err(|_| ConfigError::MissingVar("TURSO_AUTH_TOKEN"))?;
+            DatabaseConfig::Turso { url, auth_token }
         } else {
             DatabaseConfig::Sqlite {
                 path: env::var("SQLITE_PATH").unwrap_or_else(|_| "stickerbot.db".to_string()),
@@ -143,12 +147,18 @@ impl Config {
             ));
         }
 
-        if let DatabaseConfig::Turso { url } = &self.database
-            && !url.starts_with("libsql://") && !url.starts_with("http") {
+        if let DatabaseConfig::Turso { url, auth_token } = &self.database {
+            if !url.starts_with("libsql://") && !url.starts_with("http") {
                 return Err(ConfigError::InvalidValue(
                     "DATABASE_URL must be a valid Turso URL",
                 ));
             }
+            if auth_token.is_empty() {
+                return Err(ConfigError::InvalidValue(
+                    "TURSO_AUTH_TOKEN cannot be empty for Turso database",
+                ));
+            }
+        }
 
 
         if let Some(webhook) = &self.webhook {
@@ -199,6 +209,7 @@ mod tests {
             telegram_bot_token: "valid_token".to_string(),
             database: DatabaseConfig::Turso {
                 url: "invalid-url".to_string(),
+                auth_token: "token".to_string(),
             },
             webhook: None,
             owner_id: None,
@@ -236,6 +247,7 @@ mod tests {
             telegram_bot_token: "valid_token".to_string(),
             database: DatabaseConfig::Turso {
                 url: "libsql://example.turso.io".to_string(),
+                auth_token: "token".to_string(),
             },
             webhook: None,
             owner_id: None,
@@ -252,6 +264,7 @@ mod tests {
             telegram_bot_token: "valid_token".to_string(),
             database: DatabaseConfig::Turso {
                 url: "https://example.turso.io".to_string(),
+                auth_token: "token".to_string(),
             },
             webhook: None,
             owner_id: None,

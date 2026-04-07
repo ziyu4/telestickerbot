@@ -10,7 +10,7 @@ moka-cache = ["dep:moka"]
 [dependencies]
 teloxide = { version = "0.17", features = ["throttle", "tracing", "webhooks-axum", "macros", "cache-me"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
-sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite"] }
+libsql = { version = "0.9", features = ["hrana", "remote"] }
 moka = { version = "0.12", features = ["future"], optional = true }
 thiserror = "2"
 dotenvy = "0.15"

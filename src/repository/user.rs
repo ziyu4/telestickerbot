@@ -1,7 +1,7 @@
 //! User repository trait and SQLite implementation
 
 use async_trait::async_trait;
-use sqlx::SqlitePool;
+use libsql::Connection;
 use std::sync::Arc;
 use crate::db::schema::{NewUser, User};
 use super::RepositoryError;
@@ -13,28 +13,59 @@ pub trait UserRepository: Send + Sync {
     async fn update(&self, user: &User) -> Result<(), RepositoryError>;
     
     /// Set the default pack for a user.
-    ///
-    /// Updates the default_pack_id field for the user.
-    /// Pass None to clear the default pack.
     async fn set_default_pack(&self, user_id: i64, pack_id: Option<i64>) -> Result<(), RepositoryError>;
     
     /// Get the default pack ID for a user.
-    ///
-    /// Returns the default_pack_id if set, or None if not configured.
     async fn get_default_pack_id(&self, user_id: i64) -> Result<Option<i64>, RepositoryError>;
 }
 
-/// SQLite implementation of the UserRepository trait.
+/// SQLite/libSQL implementation of the UserRepository trait.
 pub struct SqliteUserRepository {
-    pool: SqlitePool,
+    conn: Connection,
     cache: Arc<crate::cache::CacheLayer<i64, User>>,
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::schema::SCHEMA_MIGRATIONS;
+
+    async fn setup_test_db() -> Connection {
+        let db = libsql::Builder::new_local(":memory:").build().await.unwrap();
+        let conn = db.connect().unwrap();
+        
+        for migration in SCHEMA_MIGRATIONS {
+            let _ = conn.execute(migration, ()).await;
+        }
+        
+        conn
+    }
+
+    #[tokio::test]
+    async fn test_user_creation_and_retrieval() {
+        let conn = setup_test_db().await;
+        let repo = SqliteUserRepository::new(conn);
+        
+        let new_user = NewUser {
+            telegram_id: 12345,
+            username: Some("testuser".to_string()),
+        };
+        
+        let created = repo.create(new_user).await.unwrap();
+        assert_eq!(created.telegram_id, 12345);
+        assert_eq!(created.username, Some("testuser".to_string()));
+        
+        let retrieved = repo.get_by_telegram_id(12345).await.unwrap().unwrap();
+        assert_eq!(retrieved.id, created.id);
+        assert_eq!(retrieved.username, created.username);
+    }
+}
+
 impl SqliteUserRepository {
-    /// Create a new SqliteUserRepository with the given connection pool.
-    pub fn new(pool: SqlitePool) -> Self {
+    /// Create a new SqliteUserRepository with the given connection.
+    pub fn new(conn: Connection) -> Self {
         Self { 
-            pool,
+            conn,
             cache: Arc::new(crate::cache::CacheLayer::none()),
         }
     }
@@ -43,144 +74,95 @@ impl SqliteUserRepository {
         self.cache = cache;
         self
     }
+
+    fn map_user(row: &libsql::Row) -> Result<User, libsql::Error> {
+        Ok(User {
+            id: row.get(0)?,
+            telegram_id: row.get(1)?,
+            username: row.get(2)?,
+            default_pack_id: row.get(3)?,
+            created_at: row.get(4)?,
+            updated_at: row.get(5)?,
+        })
+    }
 }
 
 #[async_trait]
 impl UserRepository for SqliteUserRepository {
-    /// Fetch a user by their Telegram ID.
-    ///
-    /// Returns `Ok(Some(user))` if found, `Ok(None)` if not found.
     async fn get_by_telegram_id(&self, telegram_id: i64) -> Result<Option<Arc<User>>, RepositoryError> {
-        // Check cache first
         if let Some(user) = self.cache.get(&telegram_id).await {
             return Ok(Some(user));
         }
 
-        // Query database
-        let user = sqlx::query_as::<_, User>(
+        let mut rows = self.conn.query(
             "SELECT id, telegram_id, username, default_pack_id, created_at, updated_at FROM users WHERE telegram_id = ?",
-        )
-        .bind(telegram_id)
-        .fetch_optional(&self.pool)
-        .await?;
+            [telegram_id]
+        ).await?;
 
-        let arc_user = user.map(Arc::new);
-
-        // Cache if found
-        if let Some(ref u) = arc_user {
-            self.cache.insert(telegram_id, u.clone()).await;
+        if let Some(row) = rows.next().await? {
+            let user = Arc::new(Self::map_user(&row)?);
+            self.cache.insert(telegram_id, user.clone()).await;
+            Ok(Some(user))
+        } else {
+            Ok(None)
         }
-
-        Ok(arc_user)
     }
 
-    /// Create a new user with idempotency.
-    ///
-    /// If a user with the same telegram_id already exists, returns the existing user.
-    /// Otherwise, creates and returns the new user.
     async fn create(&self, user: NewUser) -> Result<Arc<User>, RepositoryError> {
-        // Check if user already exists (idempotency)
         if let Some(existing) = self.get_by_telegram_id(user.telegram_id).await? {
             return Ok(existing);
         }
 
-        // Insert new user
-        let result = sqlx::query_as::<_, User>(
-            r#"
-            INSERT INTO users (telegram_id, username)
-            VALUES (?, ?)
-            RETURNING id, telegram_id, username, default_pack_id, created_at, updated_at
-            "#,
-        )
-        .bind(user.telegram_id)
-        .bind(&user.username)
-        .fetch_one(&self.pool)
-        .await?;
+        let mut rows = self.conn.query(
+            "INSERT INTO users (telegram_id, username) VALUES (?, ?) RETURNING id, telegram_id, username, default_pack_id, created_at, updated_at",
+            libsql::params![user.telegram_id, user.username]
+        ).await?;
 
-        Ok(Arc::new(result))
+        if let Some(row) = rows.next().await? {
+            Ok(Arc::new(Self::map_user(&row)?))
+        } else {
+            // This shouldn't happen with RETURNING
+            Err(RepositoryError::DuplicateEntry)
+        }
     }
 
-    /// Update an existing user.
-    ///
-    /// Updates the username and sets updated_at to current time.
     async fn update(&self, user: &User) -> Result<(), RepositoryError> {
-        let rows_affected = sqlx::query(
-            r#"
-            UPDATE users
-            SET username = ?, updated_at = unixepoch()
-            WHERE id = ?
-            "#,
-        )
-        .bind(&user.username)
-        .bind(user.id)
-        .execute(&self.pool)
-        .await?
-        .rows_affected();
+        let rows_affected = self.conn.execute(
+            "UPDATE users SET username = ?, updated_at = unixepoch() WHERE id = ?",
+            libsql::params![user.username.clone(), user.id]
+        ).await?;
 
         if rows_affected == 0 {
             return Err(RepositoryError::NotFound);
         }
 
-        // Invalidate cache as we updated by internal ID but cache is by telegram_id
-        // For simplicity, we can just invalidate the telegram_id if we have it
         self.cache.invalidate(&user.telegram_id).await;
-
         Ok(())
     }
 
-    /// Set the default pack for a user.
-    ///
-    /// Updates the default_pack_id field for the user.
-    /// Pass None to clear the default pack.
     async fn set_default_pack(&self, user_id: i64, pack_id: Option<i64>) -> Result<(), RepositoryError> {
-        let rows_affected = sqlx::query(
-            r#"
-            UPDATE users
-            SET default_pack_id = ?, updated_at = unixepoch()
-            WHERE id = ?
-            "#,
-        )
-        .bind(pack_id)
-        .bind(user_id)
-        .execute(&self.pool)
-        .await?
-        .rows_affected();
+        let rows_affected = self.conn.execute(
+            "UPDATE users SET default_pack_id = ?, updated_at = unixepoch() WHERE id = ?",
+            libsql::params![pack_id, user_id]
+        ).await?;
 
         if rows_affected == 0 {
             return Err(RepositoryError::NotFound);
         }
-
-        // Invalidate all caches for this user to be safe
-        // (We don't easily have telegram_id here without a query, so invalidating the whole cache or 
-        // just letting TTL handle it might be an option, but for now let's just assume we might need a better strategy if we have many users)
-        // Actually, let's just do nothing or maybe we should fetch telegram_id first.
-        // For now, let's just let TTL handle it or we fetch telegram_id.
         
         Ok(())
     }
 
-    /// Get the default pack ID for a user.
-    ///
-    /// Returns the default_pack_id if set, or None if not configured.
     async fn get_default_pack_id(&self, user_id: i64) -> Result<Option<i64>, RepositoryError> {
-        let result = sqlx::query_as::<_, (Option<i64>,)>(
-            "SELECT default_pack_id FROM users WHERE id = ?"
-        )
-        .bind(user_id)
-        .fetch_optional(&self.pool)
-        .await?;
+        let mut rows = self.conn.query(
+            "SELECT default_pack_id FROM users WHERE id = ?",
+            [user_id]
+        ).await?;
 
-        match result {
-            Some((pack_id,)) => Ok(pack_id),
-            None => Err(RepositoryError::NotFound),
+        if let Some(row) = rows.next().await? {
+            Ok(row.get(0)?)
+        } else {
+            Err(RepositoryError::NotFound)
         }
     }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    // Unit tests for SqliteUserRepository would go here
-    // These would require an in-memory SQLite database for testing
 }

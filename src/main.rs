@@ -68,8 +68,8 @@ async fn main() -> ExitCode {
     let user_cache = Arc::new(crate::cache::CacheLayer::new_moka(2048, 300));
     let pack_cache = Arc::new(crate::cache::CacheLayer::new_moka(2048, 300));
 
-    let user_repo = Arc::new(SqliteUserRepository::new(database.pool().clone()).with_cache(user_cache.clone()));
-    let pack_repo = Arc::new(SqliteStickerPackRepository::new(database.pool().clone()).with_cache(pack_cache.clone()));
+    let user_repo = Arc::new(SqliteUserRepository::new(database.conn().clone()).with_cache(user_cache.clone()));
+    let pack_repo = Arc::new(SqliteStickerPackRepository::new(database.conn().clone()).with_cache(pack_cache.clone()));
 
     info!("Phase 3 complete: Repositories and cache initialized");
 
