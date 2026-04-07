@@ -30,7 +30,7 @@ jobs:
       uses: dtolnay/rust-toolchain@stable
 
     - name: Rust Cache
-      uses: Swatinem/rust-cache@v5
+      uses: Swatinem/rust-cache@v2
 
     - name: Build Release
       run: cargo build --release
