@@ -35,7 +35,7 @@ impl SqliteUserRepository {
     pub fn new(pool: SqlitePool) -> Self {
         Self { 
             pool,
-            cache: Arc::new(crate::cache::CacheLayer::None),
+            cache: Arc::new(crate::cache::CacheLayer::none()),
         }
     }
 

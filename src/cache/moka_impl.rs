@@ -1,4 +1,5 @@
 //! Moka-based cache implementation
+#![cfg(feature = "moka-cache")]
 
 use std::time::Duration;
 use std::hash::Hash;

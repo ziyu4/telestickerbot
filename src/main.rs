@@ -64,13 +64,9 @@ async fn main() -> ExitCode {
 
     // Phase 3: Repository and cache initialization
     // Use concrete CacheLayer and Arc for Zero-Clone efficiency
-    // Default TTL: 10 minutes (600 seconds)
-    let user_cache = Arc::new(crate::cache::CacheLayer::Moka(
-        crate::cache::moka_impl::MokaCache::new(2048, 300)
-    ));
-    let pack_cache = Arc::new(crate::cache::CacheLayer::Moka(
-        crate::cache::moka_impl::MokaCache::new(2048, 300)
-    ));
+    // Default TTL: 5 minutes (300 seconds)
+    let user_cache = Arc::new(crate::cache::CacheLayer::new_moka(2048, 300));
+    let pack_cache = Arc::new(crate::cache::CacheLayer::new_moka(2048, 300));
 
     let user_repo = Arc::new(SqliteUserRepository::new(database.pool().clone()).with_cache(user_cache.clone()));
     let pack_repo = Arc::new(SqliteStickerPackRepository::new(database.pool().clone()).with_cache(pack_cache.clone()));
