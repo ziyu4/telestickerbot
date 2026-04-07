@@ -1,0 +1,61 @@
+name: Build
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTUP_HOME: /github/home/.rustup
+  CARGO_HOME: /github/home/.cargo
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    container:
+      image: debian:trixie-slim
+
+    steps:
+    - name: Install System Dependencies
+      run: |
+        apt-get update
+        apt-get install -y --no-install-recommends \
+          curl ca-certificates gcc libc6-dev pkg-config libssl-dev libsqlite3-dev \
+          build-essential git
+    
+    - uses: actions/checkout@v6
+
+    - name: Cache Rust and Cargo
+      uses: actions/cache@v5
+      with:
+        path: |
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          ~/.rustup/
+          target/
+        key: ${{ runner.os }}-rust-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-rust-
+
+    - name: Install Rust
+      run: |
+        if ! command -v rustc >/dev/null 2>&1; then
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+        fi
+        echo "$CARGO_HOME/bin" >> $GITHUB_PATH
+
+    - name: Build Release
+      run: cargo build --release
+
+    - name: Upload Build Artifact
+      uses: actions/upload-artifact@v6
+      with:
+        name: stickerbot
+        path: target/release/stickerbot
+        if-no-files-found: error
+        compression-level: 9
