@@ -8,8 +8,6 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  RUSTUP_HOME: /github/home/.rustup
-  CARGO_HOME: /github/home/.cargo
 
 jobs:
   build:
@@ -28,26 +26,11 @@ jobs:
     
     - uses: actions/checkout@v6
 
-    - name: Cache Rust and Cargo
-      uses: actions/cache@v5
-      with:
-        path: |
-          ~/.cargo/bin/
-          ~/.cargo/registry/index/
-          ~/.cargo/registry/cache/
-          ~/.cargo/git/db/
-          ~/.rustup/
-          target/
-        key: ${{ runner.os }}-rust-${{ hashFiles('**/Cargo.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-rust-
-
     - name: Install Rust
-      run: |
-        if ! command -v rustc >/dev/null 2>&1; then
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-        fi
-        echo "$CARGO_HOME/bin" >> $GITHUB_PATH
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Rust Cache
+      uses: Swatinem/rust-cache@v5
 
     - name: Build Release
       run: cargo build --release
