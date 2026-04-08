@@ -3,7 +3,6 @@
 //! A bot that enables users to "kang" (add) stickers to their personal sticker packs.
 
 mod bot;
-mod cache;
 mod config;
 mod db;
 mod repository;
@@ -62,16 +61,11 @@ async fn main() -> ExitCode {
 
     info!("Phase 2 complete: Database initialized and migrations applied");
 
-    // Phase 3: Repository and cache initialization
-    // Use concrete CacheLayer and Arc for Zero-Clone efficiency
-    // Default TTL: 5 minutes (300 seconds)
-    let user_cache = Arc::new(crate::cache::CacheLayer::new_moka(2048, 300));
-    let pack_cache = Arc::new(crate::cache::CacheLayer::new_moka(2048, 300));
+    // Phase 3: Repository initialization
+    let user_repo = Arc::new(SqliteUserRepository::new(database.conn().clone()));
+    let pack_repo = Arc::new(SqliteStickerPackRepository::new(database.conn().clone()));
 
-    let user_repo = Arc::new(SqliteUserRepository::new(database.conn().clone()).with_cache(user_cache.clone()));
-    let pack_repo = Arc::new(SqliteStickerPackRepository::new(database.conn().clone()).with_cache(pack_cache.clone()));
-
-    info!("Phase 3 complete: Repositories and cache initialized");
+    info!("Phase 3 complete: Repositories initialized");
 
     // Phase 4: Service initialization
     // Use teloxide's built-in throttle with default limits
@@ -101,13 +95,11 @@ async fn main() -> ExitCode {
 
     let user_service = Arc::new(service::UserService::new(
         user_repo.clone(),
-        user_cache,
     ));
 
     let sticker_service = Arc::new(service::StickerService::new(
         user_repo.clone(),
         pack_repo.clone(),
-        pack_cache,
         bot_username.clone(),
         telegram_client,
     ));

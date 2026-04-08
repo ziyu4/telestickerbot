@@ -54,7 +54,6 @@ where
 {
     user_repository: Arc<U>,
     sticker_pack_repository: Arc<S>,
-    cache: Arc<crate::cache::CacheLayer<i64, StickerPack>>,
     bot_username: String,
     telegram_client: Arc<TelegramClient<teloxide::adaptors::Throttle<teloxide::Bot>>>,
 }
@@ -75,14 +74,12 @@ where
     pub fn new(
         user_repository: Arc<U>,
         sticker_pack_repository: Arc<S>,
-        cache: Arc<crate::cache::CacheLayer<i64, StickerPack>>,
         bot_username: String,
         telegram_client: Arc<TelegramClient<teloxide::adaptors::Throttle<teloxide::Bot>>>,
     ) -> Self {
         Self {
             user_repository,
             sticker_pack_repository,
-            cache,
             bot_username,
             telegram_client,
         }
@@ -202,7 +199,7 @@ where
                         .await?;
                     
                     // Invalidate cache
-                    self.cache.invalidate(&user.id).await;
+
                     
                     Ok(KangResult {
                         pack: new_pack,
@@ -239,7 +236,7 @@ where
                                 .await?;
                             
                             self.sticker_pack_repository.increment_sticker_count(new_pack.id).await?;
-                            self.cache.invalidate(&user.id).await;
+        
                             
                             return Ok(KangResult {
                                 pack: new_pack,
@@ -256,7 +253,7 @@ where
                         .await?;
                     
                     // Invalidate cache
-                    self.cache.invalidate(&user.id).await;
+
                     
                     Ok(KangResult {
                         pack,
@@ -405,7 +402,7 @@ where
             .await?;
         
         // Invalidate cache
-        self.cache.invalidate(&user.id).await;
+
         
         // Fetch the updated pack to return it
         let updated_pack = self.sticker_pack_repository.get_by_id(pack.id).await?.unwrap_or(pack);
@@ -461,7 +458,7 @@ where
         let pack = self.sticker_pack_repository.insert_recovered_pack(recovered_pack).await?;
         
         // 5. Invalidate cache
-        self.cache.invalidate(&user.id).await;
+
         
         Ok(pack)
     }
@@ -479,31 +476,19 @@ where
         }
     }
 
-    /// Get the active pack for a user, checking cache first.
+    /// Get the active pack for a user.
     ///
     /// # Arguments
     /// * `user_id` - The database ID of the user
     ///
     /// # Returns
     /// The active pack if one exists, or None.
-    async fn get_active_pack_with_cache(
+    async fn get_active_pack(
         &self,
         user_id: i64,
     ) -> Result<Option<Arc<StickerPack>>, RepositoryError> {
-        // Check cache first
-        if let Some(pack) = self.cache.get(&user_id).await {
-            return Ok(Some(pack));
-        }
-
         // Query repository
-        let pack = self.sticker_pack_repository.get_active_pack(user_id).await?;
-
-        // Cache if found
-        if let Some(ref p) = pack {
-            self.cache.insert(user_id, p.clone()).await;
-        }
-
-        Ok(pack)
+        self.sticker_pack_repository.get_active_pack(user_id).await
     }
 
     /// Get the pack to use for kang operation.
@@ -542,7 +527,7 @@ where
         }
 
         // Fall back to active pack
-        Ok(self.get_active_pack_with_cache(user.id).await?)
+        Ok(self.get_active_pack(user.id).await?)
     }
 
     /// Create a default pack for a user with no existing packs.
@@ -613,7 +598,7 @@ where
     /// The next version string (e.g., "Vol1", "Vol1.1", etc.)
     async fn get_next_version_for_user(&self, user_id: i64) -> Result<String, RepositoryError> {
         // Get current active pack to determine version
-        let active_pack = self.get_active_pack_with_cache(user_id).await?;
+        let active_pack = self.get_active_pack(user_id).await?;
         
         match active_pack {
             Some(pack) => {
@@ -725,7 +710,7 @@ where
                 if Self::is_pack_invalid_error(&e) {
                     tracing::info!(pack_id = pack.id, "Pack is invalid or deleted on Telegram. Deleting from DB.");
                     self.sticker_pack_repository.delete(pack.id).await?;
-                    self.cache.invalidate(&pack.user_id).await;
+
                 }
                 return Err(e);
             }
@@ -736,7 +721,7 @@ where
         if actual_count == 0 {
             tracing::info!(pack_id = pack.id, "Pack has 0 stickers. Deleting from DB.");
             self.sticker_pack_repository.delete(pack.id).await?;
-            self.cache.invalidate(&pack.user_id).await;
+
             return Err(BotError::PackNotFound);
         }
 
@@ -759,7 +744,7 @@ where
             .await?;
 
         // Invalidate cache for this pack's user
-        self.cache.invalidate(&pack.user_id).await;
+
 
         // Fetch the updated pack
         let updated_pack = self
@@ -798,7 +783,7 @@ where
                 if Self::is_pack_invalid_error(&e) {
                     tracing::info!(pack_id = pack.id, "Pack is invalid or deleted on Telegram. Deleting from DB.");
                     let _ = self.sticker_pack_repository.delete(pack.id).await;
-                    self.cache.invalidate(&pack.user_id).await;
+
                 }
                 return Err(e);
             }
@@ -809,7 +794,7 @@ where
         if actual_count == 0 {
             tracing::info!(pack_id = pack.id, "Pack has 0 stickers. Deleting from DB.");
             let _ = self.sticker_pack_repository.delete(pack.id).await;
-            self.cache.invalidate(&pack.user_id).await;
+
             return Err(BotError::PackNotFound);
         }
 
@@ -831,7 +816,7 @@ where
             .await?;
 
         // Invalidate cache
-        self.cache.invalidate(&pack.user_id).await;
+
 
         // Fetch the updated pack
         let updated_pack = self

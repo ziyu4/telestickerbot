@@ -14,16 +14,15 @@ where
     R: UserRepository,
 {
     repository: Arc<R>,
-    cache: Arc<crate::cache::CacheLayer<i64, User>>,
 }
 
 impl<R> UserService<R>
 where
     R: UserRepository,
 {
-    /// Create a new UserService with the given repository and cache.
-    pub fn new(repository: Arc<R>, cache: Arc<crate::cache::CacheLayer<i64, User>>) -> Self {
-        Self { repository, cache }
+    /// Create a new UserService with the given repository.
+    pub fn new(repository: Arc<R>) -> Self {
+        Self { repository }
     }
 
     /// Get or create a user by their Telegram ID.
@@ -32,14 +31,8 @@ where
         telegram_id: i64,
         username: Option<String>,
     ) -> Result<Arc<User>, RepositoryError> {
-        // Check cache first
-        if let Some(user) = self.cache.get(&telegram_id).await {
-            return Ok(user);
-        }
-
         // Check repository
         if let Some(user) = self.repository.get_by_telegram_id(telegram_id).await? {
-            self.cache.insert(telegram_id, user.clone()).await;
             return Ok(user);
         }
 
@@ -49,7 +42,6 @@ where
             username,
         };
         let user = self.repository.create(new_user).await?;
-        self.cache.insert(telegram_id, user.clone()).await;
 
         Ok(user)
     }
@@ -59,27 +51,13 @@ where
         &self,
         telegram_id: i64,
     ) -> Result<Option<Arc<User>>, RepositoryError> {
-        // Check cache first
-        if let Some(user) = self.cache.get(&telegram_id).await {
-            return Ok(Some(user));
-        }
-
         // Query repository
-        let user = self.repository.get_by_telegram_id(telegram_id).await?;
-
-        // Cache if found
-        if let Some(ref u) = user {
-            self.cache.insert(telegram_id, u.clone()).await;
-        }
-
-        Ok(user)
+        self.repository.get_by_telegram_id(telegram_id).await
     }
 
     /// Update a user.
     pub async fn update(&self, user: &User) -> Result<(), RepositoryError> {
-        self.repository.update(user).await?;
-        self.cache.invalidate(&user.telegram_id).await;
-        Ok(())
+        self.repository.update(user).await
     }
 }
 

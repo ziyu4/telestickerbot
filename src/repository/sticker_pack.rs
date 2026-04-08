@@ -25,20 +25,13 @@ pub trait StickerPackRepository: Send + Sync {
 /// SQLite/libSQL implementation of the StickerPackRepository trait.
 pub struct SqliteStickerPackRepository {
     conn: Connection,
-    cache: Arc<crate::cache::CacheLayer<i64, StickerPack>>,
 }
 
 impl SqliteStickerPackRepository {
     pub fn new(conn: Connection) -> Self {
         Self {
             conn,
-            cache: Arc::new(crate::cache::CacheLayer::none()),
         }
-    }
-
-    pub fn with_cache(mut self, cache: Arc<crate::cache::CacheLayer<i64, StickerPack>>) -> Self {
-        self.cache = cache;
-        self
     }
 
     fn map_sticker_pack(row: &libsql::Row) -> Result<StickerPack, libsql::Error> {
@@ -100,7 +93,6 @@ impl StickerPackRepository for SqliteStickerPackRepository {
             return Err(RepositoryError::NotFound);
         }
 
-        self.cache.invalidate(&pack_id).await;
         Ok(())
     }
 
@@ -121,10 +113,6 @@ impl StickerPackRepository for SqliteStickerPackRepository {
     }
 
     async fn get_by_id(&self, pack_id: i64) -> Result<Option<Arc<StickerPack>>, RepositoryError> {
-        if let Some(cached_pack) = self.cache.get(&pack_id).await {
-            return Ok(Some(cached_pack));
-        }
-
         let mut rows = self.conn.query(
             "SELECT id, user_id, pack_name, pack_link, version, sticker_count, is_active, created_at, updated_at, last_synced_at FROM sticker_packs WHERE id = ?",
             [pack_id]
@@ -132,7 +120,6 @@ impl StickerPackRepository for SqliteStickerPackRepository {
 
         if let Some(row) = rows.next().await? {
             let pack = Arc::new(Self::map_sticker_pack(&row)?);
-            self.cache.insert(pack_id, pack.clone()).await;
             Ok(Some(pack))
         } else {
             Ok(None)
@@ -162,7 +149,6 @@ impl StickerPackRepository for SqliteStickerPackRepository {
             return Err(RepositoryError::NotFound);
         }
 
-        self.cache.invalidate(&pack_id).await;
         Ok(())
     }
 
@@ -176,7 +162,6 @@ impl StickerPackRepository for SqliteStickerPackRepository {
             return Err(RepositoryError::NotFound);
         }
 
-        self.cache.invalidate(&pack_id).await;
         Ok(())
     }
 
@@ -198,7 +183,6 @@ impl StickerPackRepository for SqliteStickerPackRepository {
             return Err(RepositoryError::NotFound);
         }
 
-        self.cache.invalidate(&pack_id).await;
         Ok(())
     }
 

@@ -4,14 +4,11 @@ version = "0.1.0"
 edition = "2024"
 
 [features]
-default = ["moka-cache"]
-moka-cache = ["dep:moka"]
 
 [dependencies]
 teloxide = { version = "0.17", features = ["throttle", "tracing", "webhooks-axum", "macros", "cache-me"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 libsql = { version = "0.9", features = ["hrana", "remote"] }
-moka = { version = "0.12", features = ["future"], optional = true }
 thiserror = "2"
 dotenvy = "0.15"
 tracing = "0.1"

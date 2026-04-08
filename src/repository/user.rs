@@ -22,7 +22,6 @@ pub trait UserRepository: Send + Sync {
 /// SQLite/libSQL implementation of the UserRepository trait.
 pub struct SqliteUserRepository {
     conn: Connection,
-    cache: Arc<crate::cache::CacheLayer<i64, User>>,
 }
 
 #[cfg(test)]
@@ -66,13 +65,7 @@ impl SqliteUserRepository {
     pub fn new(conn: Connection) -> Self {
         Self { 
             conn,
-            cache: Arc::new(crate::cache::CacheLayer::none()),
         }
-    }
-
-    pub fn with_cache(mut self, cache: Arc<crate::cache::CacheLayer<i64, User>>) -> Self {
-        self.cache = cache;
-        self
     }
 
     fn map_user(row: &libsql::Row) -> Result<User, libsql::Error> {
@@ -90,10 +83,6 @@ impl SqliteUserRepository {
 #[async_trait]
 impl UserRepository for SqliteUserRepository {
     async fn get_by_telegram_id(&self, telegram_id: i64) -> Result<Option<Arc<User>>, RepositoryError> {
-        if let Some(user) = self.cache.get(&telegram_id).await {
-            return Ok(Some(user));
-        }
-
         let mut rows = self.conn.query(
             "SELECT id, telegram_id, username, default_pack_id, created_at, updated_at FROM users WHERE telegram_id = ?",
             [telegram_id]
@@ -101,7 +90,6 @@ impl UserRepository for SqliteUserRepository {
 
         if let Some(row) = rows.next().await? {
             let user = Arc::new(Self::map_user(&row)?);
-            self.cache.insert(telegram_id, user.clone()).await;
             Ok(Some(user))
         } else {
             Ok(None)
@@ -136,7 +124,6 @@ impl UserRepository for SqliteUserRepository {
             return Err(RepositoryError::NotFound);
         }
 
-        self.cache.invalidate(&user.telegram_id).await;
         Ok(())
     }
 

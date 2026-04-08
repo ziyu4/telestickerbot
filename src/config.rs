@@ -137,7 +137,6 @@ impl Config {
     /// Returns `ConfigError::InvalidValue` if:
     /// - `TELEGRAM_BOT_TOKEN` is empty
     /// - `DATABASE_URL` is not a valid Turso URL (must start with `libsql://` or `http`)
-    /// - `CACHE_MAX_CAPACITY` is zero
     /// - `WEBHOOK_URL` does not start with `https://`
     /// - `WEBHOOK_SECRET` is less than 32 characters
     pub fn validate(&self) -> Result<(), ConfigError> {
