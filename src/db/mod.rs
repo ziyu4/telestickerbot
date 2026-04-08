@@ -89,7 +89,9 @@ impl Database {
         ];
 
         for pragma in pragmas {
-            self.conn.execute(pragma, ()).await?;
+            // Note: Some PRAGMAs (like journal_mode) return a row with the status.
+            // Using query() instead of execute() prevents "Execute returned rows" error.
+            let _ = self.conn.query(pragma, ()).await?;
         }
 
         Ok(())
@@ -116,8 +118,9 @@ impl Database {
 
         for pragma in pragmas {
             // Turso may silently ignore unsupported PRAGMAs — log but don't fail.
-            if let Err(e) = self.conn.execute(pragma, ()).await {
-                tracing::warn!(pragma, error = %e, "Turso PRAGMA ignored (unsupported server-side)");
+            // Using query() to handle PRAGMAs that return rows.
+            if let Err(e) = self.conn.query(pragma, ()).await {
+                tracing::warn!(pragma, error = %e, "Turso PRAGMA ignored or failed");
             }
         }
 
