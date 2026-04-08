@@ -10,13 +10,7 @@ use super::RepositoryError;
 pub trait UserRepository: Send + Sync {
     async fn get_by_telegram_id(&self, telegram_id: i64) -> Result<Option<Arc<User>>, RepositoryError>;
     async fn create(&self, user: NewUser) -> Result<Arc<User>, RepositoryError>;
-    async fn update(&self, user: &User) -> Result<(), RepositoryError>;
-    
-    /// Set the default pack for a user.
     async fn set_default_pack(&self, user_id: i64, pack_id: Option<i64>) -> Result<(), RepositoryError>;
-    
-    /// Get the default pack ID for a user.
-    async fn get_default_pack_id(&self, user_id: i64) -> Result<Option<i64>, RepositoryError>;
 }
 
 /// SQLite/libSQL implementation of the UserRepository trait.
@@ -74,8 +68,6 @@ impl SqliteUserRepository {
             telegram_id: row.get(1)?,
             username: row.get(2)?,
             default_pack_id: row.get(3)?,
-            created_at: row.get(4)?,
-            updated_at: row.get(5)?,
         })
     }
 }
@@ -84,7 +76,7 @@ impl SqliteUserRepository {
 impl UserRepository for SqliteUserRepository {
     async fn get_by_telegram_id(&self, telegram_id: i64) -> Result<Option<Arc<User>>, RepositoryError> {
         let mut rows = self.conn.query(
-            "SELECT id, telegram_id, username, default_pack_id, created_at, updated_at FROM users WHERE telegram_id = ?",
+            "SELECT id, telegram_id, username, default_pack_id FROM users WHERE telegram_id = ?",
             [telegram_id]
         ).await?;
 
@@ -102,7 +94,7 @@ impl UserRepository for SqliteUserRepository {
         }
 
         let mut rows = self.conn.query(
-            "INSERT INTO users (telegram_id, username) VALUES (?, ?) RETURNING id, telegram_id, username, default_pack_id, created_at, updated_at",
+            "INSERT INTO users (telegram_id, username) VALUES (?, ?) RETURNING id, telegram_id, username, default_pack_id",
             libsql::params![user.telegram_id, user.username]
         ).await?;
 
@@ -114,18 +106,7 @@ impl UserRepository for SqliteUserRepository {
         }
     }
 
-    async fn update(&self, user: &User) -> Result<(), RepositoryError> {
-        let rows_affected = self.conn.execute(
-            "UPDATE users SET username = ?, updated_at = unixepoch() WHERE id = ?",
-            libsql::params![user.username.clone(), user.id]
-        ).await?;
 
-        if rows_affected == 0 {
-            return Err(RepositoryError::NotFound);
-        }
-
-        Ok(())
-    }
 
     async fn set_default_pack(&self, user_id: i64, pack_id: Option<i64>) -> Result<(), RepositoryError> {
         let rows_affected = self.conn.execute(
@@ -140,16 +121,5 @@ impl UserRepository for SqliteUserRepository {
         Ok(())
     }
 
-    async fn get_default_pack_id(&self, user_id: i64) -> Result<Option<i64>, RepositoryError> {
-        let mut rows = self.conn.query(
-            "SELECT default_pack_id FROM users WHERE id = ?",
-            [user_id]
-        ).await?;
 
-        if let Some(row) = rows.next().await? {
-            Ok(row.get(0)?)
-        } else {
-            Err(RepositoryError::NotFound)
-        }
-    }
 }

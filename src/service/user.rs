@@ -45,20 +45,6 @@ where
 
         Ok(user)
     }
-
-    /// Get a user by their Telegram ID.
-    pub async fn get_by_telegram_id(
-        &self,
-        telegram_id: i64,
-    ) -> Result<Option<Arc<User>>, RepositoryError> {
-        // Query repository
-        self.repository.get_by_telegram_id(telegram_id).await
-    }
-
-    /// Update a user.
-    pub async fn update(&self, user: &User) -> Result<(), RepositoryError> {
-        self.repository.update(user).await
-    }
 }
 
 #[cfg(test)]

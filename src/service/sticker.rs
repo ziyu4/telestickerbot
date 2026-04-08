@@ -401,8 +401,10 @@ where
             .increment_sticker_count(pack.id)
             .await?;
         
-        // Invalidate cache
-
+        // Update user's default_pack_id to the new custom pack
+        self.user_repository
+            .set_default_pack(user.id, Some(pack.id))
+            .await?;
         
         // Fetch the updated pack to return it
         let updated_pack = self.sticker_pack_repository.get_by_id(pack.id).await?.unwrap_or(pack);
@@ -448,17 +450,16 @@ where
             pack_link: pack_link.to_string(),
             version: version.to_string(),
             sticker_count: sticker_set.stickers.len() as i32,
-            is_active: true,
-            created_at: Utc::now().timestamp(),
-            updated_at: Utc::now().timestamp(),
             last_synced_at: Some(Utc::now().timestamp()),
         };
 
         // 4. Insert into repository
         let pack = self.sticker_pack_repository.insert_recovered_pack(recovered_pack).await?;
         
-        // 5. Invalidate cache
-
+        // 5. Update user's default_pack_id to the recovered pack
+        self.user_repository
+            .set_default_pack(user.id, Some(pack.id))
+            .await?;
         
         Ok(pack)
     }
@@ -596,21 +597,7 @@ where
     ///
     /// # Returns
     /// The next version string (e.g., "Vol1", "Vol1.1", etc.)
-    async fn get_next_version_for_user(&self, user_id: i64) -> Result<String, RepositoryError> {
-        // Get current active pack to determine version
-        let active_pack = self.get_active_pack(user_id).await?;
-        
-        match active_pack {
-            Some(pack) => {
-                // Use next version from current pack
-                Ok(next_version(&pack.version))
-            }
-            None => {
-                // No existing pack - start with Vol1
-                Ok("Vol1".to_string())
-            }
-        }
-    }
+
 
     /// Check if a pack has reached capacity and handle it by creating a new version.
     ///
@@ -625,146 +612,7 @@ where
     ///
     /// # Returns
     /// The pack to use (either the original if not full, or the new version if full).
-    async fn check_and_handle_capacity(
-        &self,
-        user: &User,
-        pack: &StickerPack,
-    ) -> Result<Arc<StickerPack>, BotError> {
-        // Check if pack has reached capacity
-        if pack.sticker_count >= MAX_STICKERS_PER_PACK {
-            tracing::info!(
-                user_id = user.id,
-                pack_id = pack.id,
-                sticker_count = pack.sticker_count,
-                "Pack is full, creating new version"
-            );
 
-            // Create a new pack version
-            let new_pack = self.create_next_version_pack(user, pack).await?;
-
-            // Update user's default_pack_id to the new pack
-            self.user_repository
-                .set_default_pack(user.id, Some(new_pack.id))
-                .await?;
-
-            tracing::info!(
-                user_id = user.id,
-                old_pack_id = pack.id,
-                new_pack_id = new_pack.id,
-                "Created new pack version and updated default_pack_id"
-            );
-
-            Ok(new_pack)
-        } else {
-            Ok(Arc::new(pack.clone()))
-        }
-    }
-
-    /// Synchronize a sticker pack with Telegram API.
-    ///
-    /// This method implements the lazy sync strategy:
-    /// 1. Validate pack ownership
-    /// 2. Query Telegram API for the current sticker count
-    /// 3. Update the database with the actual count
-    /// 4. Update the last_synced_at timestamp
-    ///
-    /// # Arguments
-    /// * `user` - The user requesting the sync (for ownership validation)
-    /// * `pack_id` - The database ID of the pack to sync
-    ///
-    /// # Returns
-    /// The updated sticker pack with fresh data from Telegram.
-    pub async fn sync_pack(&self, user: &User, pack_id: i64) -> Result<Arc<StickerPack>, BotError> {
-        // Get the pack from database
-        let pack = self
-            .sticker_pack_repository
-            .get_by_id(pack_id)
-            .await?
-            .ok_or_else(|| {
-                tracing::error!(pack_id, "Pack not found for sync");
-                BotError::PackNotFound
-            })?;
-
-        // Validate pack ownership
-        if pack.user_id != user.id {
-            tracing::warn!(
-                user_id = user.id,
-                pack_id = pack.id,
-                pack_owner_id = pack.user_id,
-                "Pack ownership violation detected"
-            );
-            return Err(BotError::PackOwnershipViolation);
-        }
-
-        tracing::info!(
-            pack_id = pack.id,
-            pack_link = %pack.pack_link,
-            current_count = pack.sticker_count,
-            "Starting pack sync with Telegram API"
-        );
-
-        // Query Telegram API for current sticker set info
-        let sticker_set = match self.telegram_client.get_sticker_set(&pack.pack_link).await {
-            Ok(set) => set,
-            Err(e) => {
-                if Self::is_pack_invalid_error(&e) {
-                    tracing::info!(pack_id = pack.id, "Pack is invalid or deleted on Telegram. Deleting from DB.");
-                    self.sticker_pack_repository.delete(pack.id).await?;
-
-                }
-                return Err(e);
-            }
-        };
-
-        let actual_count = sticker_set.stickers.len() as i32;
-        
-        if actual_count == 0 {
-            tracing::info!(pack_id = pack.id, "Pack has 0 stickers. Deleting from DB.");
-            self.sticker_pack_repository.delete(pack.id).await?;
-
-            return Err(BotError::PackNotFound);
-        }
-
-        tracing::info!(
-            pack_id = pack.id,
-            pack_link = %pack.pack_link,
-            db_count = pack.sticker_count,
-            actual_count,
-            "Retrieved sticker count from Telegram API"
-        );
-
-        // Update database with actual count
-        self.sticker_pack_repository
-            .update_sticker_count(pack.id, actual_count)
-            .await?;
-
-        // Update last_synced_at timestamp
-        self.sticker_pack_repository
-            .update_last_synced(pack.id)
-            .await?;
-
-        // Invalidate cache for this pack's user
-
-
-        // Fetch the updated pack
-        let updated_pack = self
-            .sticker_pack_repository
-            .get_by_id(pack_id)
-            .await?
-            .ok_or_else(|| {
-                tracing::error!(pack_id, "Pack not found after sync update");
-                BotError::PackNotFound
-            })?;
-
-        tracing::info!(
-            pack_id = updated_pack.id,
-            sticker_count = updated_pack.sticker_count,
-            last_synced_at = ?updated_pack.last_synced_at,
-            "Pack sync completed successfully"
-        );
-
-        Ok(updated_pack)
-    }
 
     /// Internal sync method that doesn't require user validation.
     /// Used for lazy sync during operations.
@@ -1014,9 +862,6 @@ mod tests {
             pack_link: "u1V1_by_testbot".to_string(),
             version: "Vol1".to_string(),
             sticker_count: 0,
-            is_active: true,
-            created_at: Utc::now().timestamp(),
-            updated_at: Utc::now().timestamp(),
             last_synced_at: None,
         };
         assert!(StickerService::<crate::repository::SqliteUserRepository, crate::repository::SqliteStickerPackRepository>::is_pack_stale(&pack));
@@ -1035,9 +880,6 @@ mod tests {
             pack_link: "u1V1_by_testbot".to_string(),
             version: "Vol1".to_string(),
             sticker_count: 0,
-            is_active: true,
-            created_at: now,
-            updated_at: now,
             last_synced_at: Some(recent_sync),
         };
         assert!(!StickerService::<crate::repository::SqliteUserRepository, crate::repository::SqliteStickerPackRepository>::is_pack_stale(&pack));
@@ -1056,9 +898,6 @@ mod tests {
             pack_link: "u1V1_by_testbot".to_string(),
             version: "Vol1".to_string(),
             sticker_count: 0,
-            is_active: true,
-            created_at: now,
-            updated_at: now,
             last_synced_at: Some(old_sync),
         };
         assert!(StickerService::<crate::repository::SqliteUserRepository, crate::repository::SqliteStickerPackRepository>::is_pack_stale(&pack));
@@ -1077,9 +916,6 @@ mod tests {
             pack_link: "u1V1_by_testbot".to_string(),
             version: "Vol1".to_string(),
             sticker_count: 0,
-            is_active: true,
-            created_at: now,
-            updated_at: now,
             last_synced_at: Some(exact_sync),
         };
         assert!(StickerService::<crate::repository::SqliteUserRepository, crate::repository::SqliteStickerPackRepository>::is_pack_stale(&pack));

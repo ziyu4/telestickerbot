@@ -12,9 +12,7 @@ pub const CREATE_USERS_TABLE: &str = r#"
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     telegram_id INTEGER NOT NULL UNIQUE,
-    username TEXT,
-    created_at INTEGER NOT NULL DEFAULT (unixepoch()),
-    updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+    username TEXT
 )
 "#;
 
@@ -32,9 +30,6 @@ CREATE TABLE IF NOT EXISTS sticker_packs (
     pack_link TEXT NOT NULL UNIQUE,
     version TEXT NOT NULL,
     sticker_count INTEGER NOT NULL DEFAULT 0,
-    is_active INTEGER NOT NULL DEFAULT 1,
-    created_at INTEGER NOT NULL DEFAULT (unixepoch()),
-    updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
     last_synced_at INTEGER,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 )
@@ -65,12 +60,13 @@ pub const MIGRATE_DEFAULT_PACK_ID: &str = r#"
 UPDATE users 
 SET default_pack_id = (
     SELECT id FROM sticker_packs 
-    WHERE user_id = users.id AND is_active = 1 
+    WHERE user_id = users.id 
+    ORDER BY id DESC
     LIMIT 1
 )
 WHERE EXISTS (
     SELECT 1 FROM sticker_packs 
-    WHERE user_id = users.id AND is_active = 1
+    WHERE user_id = users.id
 )
 "#;
 
@@ -97,8 +93,6 @@ pub struct User {
     pub telegram_id: i64,
     pub username: Option<String>,
     pub default_pack_id: Option<i64>,
-    pub created_at: i64,
-    pub updated_at: i64,
 }
 
 /// Sticker pack entity
@@ -110,9 +104,6 @@ pub struct StickerPack {
     pub pack_link: String,
     pub version: String,
     pub sticker_count: i32,
-    pub is_active: bool,
-    pub created_at: i64,
-    pub updated_at: i64,
     pub last_synced_at: Option<i64>,
 }
 
