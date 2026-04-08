@@ -7,6 +7,19 @@
 // Schema SQL Constants
 // ============================================================================
 
+/// SQL to create the internal migrations metadata table
+pub const CREATE_MIGRATIONS_TABLE: &str = r#"
+CREATE TABLE IF NOT EXISTS __migrations_metadata (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    version INTEGER NOT NULL
+)
+"#;
+
+/// SQL to initialize the migrations metadata table
+pub const INITIALIZE_MIGRATIONS_TABLE: &str = r#"
+INSERT OR IGNORE INTO __migrations_metadata (id, version) VALUES (1, 0)
+"#;
+
 /// SQL to create the users table
 pub const CREATE_USERS_TABLE: &str = r#"
 CREATE TABLE IF NOT EXISTS users (

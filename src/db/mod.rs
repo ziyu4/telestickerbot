@@ -127,28 +127,72 @@ impl Database {
     /// Run all schema migrations.
     ///
     /// This creates the users and sticker_packs tables with their indexes
-    /// if they don't already exist.
+    /// if they don't already exist. It tracks the current schema version
+    /// in the `__migrations_metadata` table to avoid redundant operations.
     ///
     /// # Errors
     ///
     /// Returns an error if any migration fails to execute.
     pub async fn run_migrations(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        for migration in schema::SCHEMA_MIGRATIONS {
-            // Execute migration, ignoring "duplicate column" errors for ALTER TABLE
+        // Step 1: Ensure the migrations metadata table exists
+        self.conn.execute(schema::CREATE_MIGRATIONS_TABLE, ()).await?;
+        self.conn.execute(schema::INITIALIZE_MIGRATIONS_TABLE, ()).await?;
+
+        // Step 2: Get the current schema version
+        let mut rows = self.conn.query("SELECT version FROM __migrations_metadata WHERE id = 1", ()).await?;
+        let current_version: i64 = if let Some(row) = rows.next().await? {
+            row.get(0)?
+        } else {
+            0
+        };
+
+        let total_migrations = schema::SCHEMA_MIGRATIONS.len() as i64;
+        
+        if current_version >= total_migrations {
+            tracing::debug!(current_version, total_migrations, "Database is up to date, skipping migrations");
+            return Ok(());
+        }
+
+        tracing::info!(
+            current_version,
+            available_migrations = total_migrations,
+            "Starting database migrations"
+        );
+
+        // Step 3: Run missing migrations
+        for (i, migration) in schema::SCHEMA_MIGRATIONS.iter().enumerate() {
+            let migration_index = i as i64;
+            
+            // Skip already applied migrations
+            if migration_index < current_version {
+                continue;
+            }
+
+            tracing::debug!(version = migration_index + 1, "Applying migration: {}", migration);
+
+            // Execute migration
             let result = self.conn.execute(migration, ()).await;
             
-            // Check if error is due to duplicate column (which is fine for idempotency)
+            // Handle idempotency for older migrations (ignore duplicate column name errors)
             if let Err(ref e) = result {
                 let error_msg = e.to_string();
                 if error_msg.contains("duplicate column name") {
-                    // Column already exists, skip this migration
-                    tracing::debug!("Skipping migration (column already exists): {}", migration);
-                    continue;
+                    tracing::debug!("Column already exists, treating migration as successful");
+                } else {
+                    // For other errors, propagate them
+                    return Err(Box::new(result.unwrap_err()));
                 }
-                // For other errors, propagate them
-                return Err(Box::new(result.unwrap_err()));
             }
+
+            // Update version after each successful migration
+            let next_version = migration_index + 1;
+            self.conn.execute(
+                "UPDATE __migrations_metadata SET version = ? WHERE id = 1",
+                [next_version]
+            ).await?;
         }
+
+        tracing::info!("Database migrations completed successfully");
         Ok(())
     }
 }
