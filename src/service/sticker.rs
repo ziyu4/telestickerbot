@@ -744,13 +744,14 @@ pub fn next_version(current: &str) -> String {
 ///
 /// # Arguments
 /// * `telegram_id` - The user's Telegram ID
-/// * `version` - The version string (e.g., "1", "1.5")
+/// * `version` - The version string (e.g., "1", "1_5")
 /// * `bot_username` - The bot's username
 ///
 /// # Returns
 /// A pack link string
 pub fn generate_pack_link(telegram_id: i64, version: &str, bot_username: &str) -> String {
-    format!("u{}V{}_by_{}", telegram_id, version, bot_username)
+    let safe_version = version.replace('.', "_");
+    format!("u{}V{}_by_{}", telegram_id, safe_version, bot_username)
 }
 
 /// Generates a custom pack link in the format `{sanitized_name}_u{telegram_id}_by_{bot_username}`.
