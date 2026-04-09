@@ -103,7 +103,14 @@ where
         Err(e) => {
             let error_message = match &e {
                 BotError::TelegramApi(api_error) => {
-                    crate::bot::telegram::parse_api_error(api_error)
+                    crate::bot::telegram::parse_api_error(api_error, sticker_service.bot_username())
+                }
+                BotError::TelegramRequest(req_error) => {
+                    if let teloxide::RequestError::Api(api_error) = req_error {
+                        crate::bot::telegram::parse_api_error(api_error, sticker_service.bot_username())
+                    } else {
+                        "A network error occurred. Please try again later.".to_string()
+                    }
                 }
                 BotError::DatabaseError(_) => {
                     "A database error occurred. Please try again later.".to_string()
@@ -118,6 +125,7 @@ where
             };
 
             bot.send_message(msg.chat.id, error_message)
+                .parse_mode(teloxide::types::ParseMode::Html)
                 .reply_parameters(ReplyParameters::new(msg.id))
                 .await?;
             return Err(e);

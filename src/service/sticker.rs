@@ -85,6 +85,11 @@ where
         }
     }
 
+    /// Get the bot's username
+    pub fn bot_username(&self) -> &str {
+        &self.bot_username
+    }
+
     /// Add a sticker to the user's default or active pack (kang operation).
     ///
     /// This method implements the kang command logic:
@@ -831,7 +836,7 @@ mod tests {
     #[test]
     fn test_generate_pack_link() {
         assert_eq!(generate_pack_link(123456789, "1", "mybot"), "u123456789V1_by_mybot");
-        assert_eq!(generate_pack_link(123456789, "1.5", "mybot"), "u123456789V1.5_by_mybot");
+        assert_eq!(generate_pack_link(123456789, "1.5", "mybot"), "u123456789V1_5_by_mybot");
         assert_eq!(generate_pack_link(987654321, "2", "testbot"), "u987654321V2_by_testbot");
     }
 
@@ -999,7 +1004,7 @@ mod tests {
             // Verify the pack link format matches: u{telegram_id}V{version}_by_{bot_username}
             let expected_prefix = format!("u{}", telegram_id);
             let expected_suffix = format!("_by_{}", bot_username);
-            let expected = format!("u{}V{}_by_{}", telegram_id, version, bot_username);
+            let expected = format!("u{}V{}_by_{}", telegram_id, version.replace('.', "_"), bot_username);
 
             prop_assert!(link.starts_with(&expected_prefix), "Link should start with u{{telegram_id}}");
             prop_assert!(link.contains("V"), "Link should contain V");

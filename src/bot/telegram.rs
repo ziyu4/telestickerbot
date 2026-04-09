@@ -203,10 +203,11 @@ pub fn get_sticker_format(sticker: &Sticker) -> StickerFormat {
 ///
 /// # Arguments
 /// * `error` - The Telegram API error
+/// * `bot_username` - The bot's username to generate deep links
 ///
 /// # Returns
 /// A user-friendly error message string.
-pub fn parse_api_error(error: &teloxide::ApiError) -> String {
+pub fn parse_api_error(error: &teloxide::ApiError, bot_username: &str) -> String {
     match error {
         teloxide::ApiError::StickerSetNameOccupied => {
             "A sticker pack with this name already exists. Please try again.".to_string()
@@ -233,6 +234,12 @@ pub fn parse_api_error(error: &teloxide::ApiError) -> String {
             "Failed to process sticker image. Please use a different sticker.".to_string()
         }
         teloxide::ApiError::Unknown(msg) => {
+            if msg.contains("PEER_ID_INVALID") {
+                return format!(
+                    "You need to start me in PM first before creating/adding stickers!\n\n<a href=\"https://t.me/{}?start=1\">👉 Start Bot Here 👈</a>",
+                    bot_username
+                );
+            }
             tracing::error!(error = msg, "Unknown Telegram API error");
             "An unexpected error occurred. Please try again later.".to_string()
         }
@@ -251,21 +258,21 @@ mod tests {
     #[test]
     fn test_parse_api_error_sticker_set_name_occupied() {
         let error = teloxide::ApiError::StickerSetNameOccupied;
-        let message = parse_api_error(&error);
+        let message = parse_api_error(&error, "testbot");
         assert!(message.contains("already exists"));
     }
 
     #[test]
     fn test_parse_api_error_invalid_stickers_set() {
         let error = teloxide::ApiError::InvalidStickersSet;
-        let message = parse_api_error(&error);
+        let message = parse_api_error(&error, "testbot");
         assert!(message.contains("invalid or has been deleted"));
     }
 
     #[test]
     fn test_parse_api_error_unknown() {
         let error = teloxide::ApiError::Unknown("test error".to_string());
-        let message = parse_api_error(&error);
+        let message = parse_api_error(&error, "testbot");
         assert!(message.contains("unexpected error"));
     }
 
