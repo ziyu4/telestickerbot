@@ -74,7 +74,7 @@ impl StickerPackRepository for SqliteStickerPackRepository {
 
     async fn increment_sticker_count(&self, pack_id: i64) -> Result<(), RepositoryError> {
         let rows_affected = self.conn.execute(
-            "UPDATE sticker_packs SET sticker_count = sticker_count + 1, updated_at = unixepoch(), last_synced_at = unixepoch() WHERE id = ?",
+            "UPDATE sticker_packs SET sticker_count = sticker_count + 1, last_synced_at = unixepoch() WHERE id = ?",
             [pack_id]
         ).await?;
 

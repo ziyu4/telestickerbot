@@ -110,7 +110,7 @@ impl UserRepository for SqliteUserRepository {
 
     async fn set_default_pack(&self, user_id: i64, pack_id: Option<i64>) -> Result<(), RepositoryError> {
         let rows_affected = self.conn.execute(
-            "UPDATE users SET default_pack_id = ?, updated_at = unixepoch() WHERE id = ?",
+            "UPDATE users SET default_pack_id = ? WHERE id = ?",
             libsql::params![pack_id, user_id]
         ).await?;
 

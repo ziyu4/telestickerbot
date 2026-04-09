@@ -681,28 +681,17 @@ where
 
     /// Check if an error indicates the pack is full.
     fn is_pack_full_error(error: &BotError) -> bool {
-        match error {
-            BotError::TelegramApi(api_error) => {
-                // Check for STICKERSET_FULL error from Telegram
-                let error_str = format!("{:?}", api_error);
-                error_str.contains("STICKERSET_FULL") 
-                    || error_str.contains("stickerset_full")
-                    || error_str.contains("too many stickers")
-                    || error_str.contains("STICKERS_TOO_MUCH")
-            }
-            _ => false,
-        }
+        let error_str = format!("{:?}", error);
+        error_str.contains("STICKERSET_FULL") 
+            || error_str.contains("stickerset_full")
+            || error_str.contains("too many stickers")
+            || error_str.contains("STICKERS_TOO_MUCH")
     }
 
     /// Check if an error indicates the pack is invalid/deleted.
     fn is_pack_invalid_error(error: &BotError) -> bool {
-        match error {
-            BotError::TelegramApi(api_error) => {
-                let error_str = format!("{:?}", api_error);
-                error_str.contains("InvalidStickersSet") || error_str.contains("STICKERSET_INVALID")
-            }
-            _ => false,
-        }
+        let error_str = format!("{:?}", error);
+        error_str.contains("InvalidStickersSet") || error_str.contains("STICKERSET_INVALID")
     }
 
     /// Check if an error indicates the pack name is already occupied.
