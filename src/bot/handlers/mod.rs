@@ -12,7 +12,7 @@ use std::sync::Arc;
 use teloxide::{
     dispatching::Dispatcher,
     prelude::*,
-    types::{CallbackQuery, Message},
+    types::{CallbackQuery, ChatKind, Message},
     Bot,
 };
 
@@ -110,7 +110,36 @@ pub fn build_dispatcher(
 
     // Define the message handler branch
     let message_handler = Update::filter_message()
-        .branch(command_handler);
+        .branch(command_handler)
+        // Auto-kang for stickers in private chat
+        .branch(
+            dptree::filter(|msg: Message| matches!(msg.chat.kind, ChatKind::Private(_)))
+                .filter(|msg: Message| msg.sticker().is_some())
+                .endpoint(
+                    |bot: teloxide::adaptors::Throttle<Bot>, 
+                     msg: Message, 
+                     user_service: Arc<UserService<crate::repository::SqliteUserRepository>>,
+                     sticker_service: Arc<StickerService<crate::repository::SqliteUserRepository, crate::repository::SqliteStickerPackRepository>>| async move {
+                        handle_kang(bot, msg, user_service, sticker_service).await
+                    }
+                )
+        )
+        // Auto-sticker for photo/video in private chat
+        .branch(
+            dptree::filter(|msg: Message| matches!(msg.chat.kind, ChatKind::Private(_)))
+                .filter(|msg: Message| {
+                    msg.photo().is_some() || msg.video().is_some() || msg.document().is_some()
+                })
+                .endpoint(
+                    |bot: teloxide::adaptors::Throttle<Bot>, 
+                     msg: Message, 
+                     user_service: Arc<UserService<crate::repository::SqliteUserRepository>>,
+                     sticker_service: Arc<StickerService<crate::repository::SqliteUserRepository, crate::repository::SqliteStickerPackRepository>>| async move {
+                        // Empty emoji arg = random emoji
+                        handle_sticker(bot, msg, String::new(), user_service, sticker_service).await
+                    }
+                )
+        );
 
     // Define the callback query handler branch
     let callback_handler = Update::filter_callback_query()

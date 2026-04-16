@@ -33,10 +33,31 @@ where
     // Get the username for pack naming
     let username = msg.from.as_ref().and_then(|u| u.username.clone());
 
-    // Validate that the command is a reply to a sticker
+    // Validate that the command is a reply to a sticker OR a direct sticker message
     let sticker = match msg.reply_to_message() {
         Some(reply) => {
             match reply.sticker() {
+                Some(s) => s.clone(),
+                None => {
+                    // Check if the message itself contains a sticker (for auto-kang in PM)
+                    match msg.sticker() {
+                        Some(s) => s.clone(),
+                        None => {
+                            bot.send_message(
+                                msg.chat.id,
+                                "Please reply to a sticker with /kang to add it.",
+                            )
+                            .reply_parameters(ReplyParameters::new(msg.id))
+                            .await?;
+                            return Ok(());
+                        }
+                    }
+                }
+            }
+        }
+        None => {
+            // Check if the message itself contains a sticker (for auto-kang in PM)
+            match msg.sticker() {
                 Some(s) => s.clone(),
                 None => {
                     bot.send_message(
@@ -48,15 +69,6 @@ where
                     return Ok(());
                 }
             }
-        }
-        None => {
-            bot.send_message(
-                msg.chat.id,
-                "Please reply to a sticker with /kang to add it.",
-            )
-            .reply_parameters(ReplyParameters::new(msg.id))
-            .await?;
-            return Ok(());
         }
     };
 
