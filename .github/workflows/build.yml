@@ -22,7 +22,10 @@ jobs:
         apt-get update
         apt-get install -y --no-install-recommends \
           curl ca-certificates gcc libc6-dev pkg-config libssl-dev libsqlite3-dev \
-          build-essential git
+          build-essential git clang libclang-dev \
+          libavcodec-dev libavformat-dev libavutil-dev \
+          libavdevice-dev libavfilter-dev \
+          libswscale-dev libswresample-dev
     
     - uses: actions/checkout@v6
 

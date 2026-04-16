@@ -5,6 +5,8 @@ pub mod set_sticker_pack;
 pub mod callback_query;
 pub mod stats;
 pub mod utils;
+pub mod sticker;
+pub mod transcoder;
 
 use std::sync::Arc;
 use teloxide::{
@@ -24,6 +26,7 @@ use self::create_pack::handle_createpack;
 use self::set_sticker_pack::handle_setstickerpack;
 use self::callback_query::handle_callback_query;
 use self::stats::handle_stats;
+use self::sticker::handle_sticker;
 
 /// Build the dptree dispatcher with command routing and dependency injection.
 pub fn build_dispatcher(
@@ -68,6 +71,18 @@ pub fn build_dispatcher(
                      user_service: Arc<UserService<crate::repository::SqliteUserRepository>>,
                      sticker_service: Arc<StickerService<crate::repository::SqliteUserRepository, crate::repository::SqliteStickerPackRepository>>| async move {
                         handle_createpack(bot, msg, pack_name, user_service, sticker_service).await
+                    }
+                )
+        )
+        .branch(
+            case![Command::Sticker(emoji_arg)]
+                .endpoint(
+                    |bot: teloxide::adaptors::Throttle<Bot>, 
+                     msg: Message, 
+                     emoji_arg: String,
+                     user_service: Arc<UserService<crate::repository::SqliteUserRepository>>,
+                     sticker_service: Arc<StickerService<crate::repository::SqliteUserRepository, crate::repository::SqliteStickerPackRepository>>| async move {
+                        handle_sticker(bot, msg, emoji_arg, user_service, sticker_service).await
                     }
                 )
         )

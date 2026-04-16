@@ -234,6 +234,28 @@ pub fn parse_api_error(error: &teloxide::ApiError, bot_username: &str) -> String
             "Failed to process sticker image. Please use a different sticker.".to_string()
         }
         teloxide::ApiError::Unknown(msg) => {
+            // Handle specific error messages from Telegram
+            if msg.contains("STICKER_VIDEO_LONG") {
+                return "Video is too long! Maximum duration is 3 seconds. Please use a shorter video.".to_string();
+            }
+            if msg.contains("STICKER_VIDEO_TOO_LARGE") {
+                return "Video file is too large! Maximum size is 256KB after conversion.".to_string();
+            }
+            if msg.contains("STICKER_PNG_DIMENSIONS") {
+                return "Sticker dimensions are invalid. Must be 512px on one side.".to_string();
+            }
+            if msg.contains("STICKER_EMOJI_INVALID") {
+                return "Invalid emoji(s) provided. Please use standard emojis.".to_string();
+            }
+            if msg.contains("STICKER_INVALID_EMOJI") {
+                return "Invalid emoji(s) provided. Please use standard emojis.".to_string();
+            }
+            if msg.contains("STICKER_EMPTY") {
+                return "The sticker file is empty or corrupted. Please try a different file.".to_string();
+            }
+            if msg.contains("STICKER_INVALID") {
+                return "Invalid sticker format. Please try a different file.".to_string();
+            }
             if msg.contains("PEER_ID_INVALID") {
                 return format!(
                     "You need to start me in PM first before creating/adding stickers!\n\n<a href=\"https://t.me/{}?start=1\">👉 Start Bot Here 👈</a>",

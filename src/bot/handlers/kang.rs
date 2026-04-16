@@ -71,9 +71,15 @@ where
     // Get emojis from the sticker, or use a default
     let emojis = sticker.emoji.clone().unwrap_or_else(|| "😀".to_string());
 
+    let input_sticker = crate::bot::telegram::create_input_sticker_from_file_id(
+        &sticker.file.id.0,
+        &sticker_format,
+        &emojis,
+    );
+
     // Perform the kang operation
     let result = sticker_service
-        .kang_sticker(&user, &sticker.file.id.0, sticker_format, &emojis)
+        .kang_sticker(&user, input_sticker)
         .await;
 
     match result {

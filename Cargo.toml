@@ -18,6 +18,18 @@ chrono = { version = "0.4", features = ["serde"] }
 mimalloc = "*"
 url = "2"
 sysinfo = { version = "0.38.4", default-features = false, features = ["system"] }
+tempfile = "3.27.0"
+uuid = { version = "1.23.1", features = ["v4"] }
+tokio-util = { version = "0.7.18", features = ["io"] }
+ffmpeg-next = "8.1.0"
+image = { version = "0.25.10", features = ["webp", "jpeg", "png"] }
+serde = { version = "1", features = ["derive"] }
+rand = "0.9"
+
+[build-dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+ureq = "3"
 
 [dev-dependencies]
 proptest = "1"

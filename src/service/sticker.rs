@@ -110,9 +110,7 @@ where
     pub async fn kang_sticker(
         &self,
         user: &User,
-        sticker_file_id: &str,
-        sticker_format: StickerFormat,
-        emojis: &str,
+        input_sticker: teloxide::types::InputSticker,
     ) -> Result<KangResult, BotError> {
         // Get the pack to use: default pack if configured, otherwise active pack
         let pack = self.get_pack_for_kang(user).await?;
@@ -154,13 +152,6 @@ where
                 if pack.sticker_count >= MAX_STICKERS_PER_PACK {
                     // Create a new version
                     let new_pack = self.create_next_version_pack(user, &pack).await?;
-                    
-                    // Create input sticker for Telegram API
-                    let input_sticker = create_input_sticker_from_file_id(
-                        sticker_file_id,
-                        &sticker_format,
-                        emojis,
-                    );
                     
                     // Create new sticker set via Telegram API
                     if let Err(e) = self.telegram_client
@@ -211,16 +202,9 @@ where
                         created_new_pack: true,
                     })
                 } else {
-                    // Create input sticker for Telegram API
-                    let input_sticker = create_input_sticker_from_file_id(
-                        sticker_file_id,
-                        &sticker_format,
-                        emojis,
-                    );
-                    
                     // Add sticker to existing pack via Telegram API
                     if let Err(e) = self.telegram_client
-                        .add_sticker_to_set(user.telegram_id, &pack.pack_link, input_sticker)
+                        .add_sticker_to_set(user.telegram_id, &pack.pack_link, input_sticker.clone())
                         .await
                     {
                         // Check if error is pack full or invalid - sync and handle
@@ -230,14 +214,8 @@ where
                             
                             // Create new version since pack is confirmed full
                             let new_pack = self.create_next_version_pack(user, &synced_pack).await?;
-                            let retry_input_sticker = create_input_sticker_from_file_id(
-                                sticker_file_id,
-                                &sticker_format,
-                                emojis,
-                            );
-                            
                             self.telegram_client
-                                .add_sticker_to_set(user.telegram_id, &new_pack.pack_link, retry_input_sticker)
+                                .add_sticker_to_set(user.telegram_id, &new_pack.pack_link, input_sticker.clone())
                                 .await?;
                             
                             self.sticker_pack_repository.increment_sticker_count(new_pack.id).await?;
@@ -270,13 +248,7 @@ where
                 // No active pack - create the first one
                 let new_pack = self.create_default_pack(user).await?;
                 
-                // Create input sticker for Telegram API
-                let input_sticker = create_input_sticker_from_file_id(
-                    sticker_file_id,
-                    &sticker_format,
-                    emojis,
-                );
-                
+ 
                 // Create new sticker set via Telegram API
                 if let Err(e) = self.telegram_client
                     .create_sticker_set(

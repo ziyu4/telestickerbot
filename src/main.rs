@@ -5,6 +5,7 @@
 mod bot;
 mod config;
 mod db;
+mod emoji;
 mod repository;
 mod service;
 
@@ -25,6 +26,18 @@ use crate::repository::{SqliteStickerPackRepository, SqliteUserRepository};
 
 #[tokio::main]
 async fn main() -> ExitCode {
+    // Phase 0: FFmpeg initialization
+    if let Err(e) = crate::bot::handlers::transcoder::init_ffmpeg() {
+        eprintln!("FFmpeg initialization failed: {e}");
+        return ExitCode::FAILURE;
+    }
+
+    // Phase 0: FFmpeg initialization
+    if let Err(e) = crate::bot::handlers::transcoder::init_ffmpeg() {
+        eprintln!("FFmpeg initialization failed: {e}");
+        return ExitCode::FAILURE;
+    }
+
     // Phase 1: Configuration
     dotenvy::dotenv().ok();
     tracing_subscriber::fmt::init();

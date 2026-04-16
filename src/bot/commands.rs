@@ -20,6 +20,10 @@ pub enum Command {
     #[command(description = "Create a new sticker pack with a custom name")]
     CreatePack(String),
 
+    /// Convert a photo or video to a sticker
+    #[command(aliases = ["s"], description = "Convert a photo or video into a sticker")]
+    Sticker(String),
+
     /// Select your default sticker pack from a list
     #[command(description = "Select your default sticker pack")]
     SetStickerPack,
